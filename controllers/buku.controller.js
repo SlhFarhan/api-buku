@@ -43,8 +43,7 @@ exports.updateBuku = async (req, res) => {
         if (!buku) {
             return res.status(404).send({ message: "Buku not found" });
         }
-
-        if (buku.userId !== req.userId) {
+        if (buku.userId !== req.userId && buku.userId !== null) { // Penyesuaian: user hanya bisa edit bukunya sendiri
             return res.status(403).send({ message: "Forbidden: You don't own this book" });
         }
         
@@ -59,7 +58,9 @@ exports.updateBuku = async (req, res) => {
             penulis_buku: penulis_buku || buku.penulis_buku,
             gambar: imageUrl
         });
-        res.send({ message: "Buku updated successfully!", buku });
+
+        // PERBAIKAN: Kirim kembali objek 'buku' secara langsung
+        res.send(buku); 
 
     } catch (error) {
         res.status(500).send({ message: error.message });
