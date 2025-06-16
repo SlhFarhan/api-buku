@@ -1,12 +1,15 @@
+// Menggunakan model dan pustaka yang diperlukan
 const { User } = require('../models');
 const bcrypt = require('bcryptjs');
-const jwt = 'jsonwebtoken';
+const jwt = require('jsonwebtoken'); // <-- PERBAIKAN 1: Mengimpor modul, bukan string
 const { OAuth2Client } = require('google-auth-library');
+const crypto = require('crypto'); // <-- PERBAIKAN 2: Impor modul crypto untuk password aman
 
-// Inisialisasi client tanpa client ID karena tidak akan digunakan untuk validasi audience
-const client = new OAuth2Client();
+// Inisialisasi client dengan Client ID untuk validasi audience
+// Pastikan GOOGLE_CLIENT_ID di file .env adalah tipe "Web Application"
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// ... (fungsi register dan login biasa tidak berubah) ...
+// Fungsi register tidak berubah
 exports.register = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -18,6 +21,7 @@ exports.register = async (req, res) => {
     }
 };
 
+// Fungsi login tidak berubah
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -37,36 +41,33 @@ exports.login = async (req, res) => {
 };
 
 
-// --- BAGIAN YANG DIPERBARUI ---
-// Handler untuk login dengan Google
+// --- FUNGSI GOOGLE LOGIN YANG DIPERBAIKI ---
 exports.googleLogin = async (req, res) => {
     const { token } = req.body; 
 
     try {
-        // Verifikasi token tanpa memeriksa 'audience' (client ID)
+        // PERBAIKAN 3: Verifikasi token dengan 'audience' untuk keamanan
         const ticket = await client.verifyIdToken({
             idToken: token,
-            // audience: process.env.GOOGLE_CLIENT_ID, // <-- BARIS INI DIHAPUS/DIKOMENTARI
+            audience: process.env.GOOGLE_CLIENT_ID, 
         });
 
         const payload = ticket.getPayload();
-        // Jika payload null atau tidak ada email, token dianggap tidak valid
         if (!payload || !payload.email) {
             return res.status(401).send({ message: "Invalid Google Token: Payload missing." });
         }
         
         const { email } = payload;
 
-        // Cari atau buat user baru berdasarkan email
         const [user] = await User.findOrCreate({
             where: { email: email },
             defaults: {
-                // Buat password acak untuk user yang login via Google
-                password: await bcrypt.hash(Math.random().toString(36), 8),
+                // PERBAIKAN 4: Membuat password acak yang aman untuk user Google
+                password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 8),
             }
         });
 
-        // Buat token JWT untuk sesi aplikasi
+        // Buat token JWT untuk sesi aplikasi Anda
         const accessToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
             expiresIn: 86400 // 24 jam
         });
@@ -78,8 +79,8 @@ exports.googleLogin = async (req, res) => {
         });
 
     } catch (error) {
-        // Tangani error jika token tidak valid sama sekali
+        // Memberikan pesan error yang lebih jelas jika verifikasi gagal
         console.error("Google login error:", error);
-        res.status(401).send({ message: "Invalid Google Token" });
+        res.status(401).send({ message: "Invalid Google Token or Audience Mismatch" });
     }
 };
